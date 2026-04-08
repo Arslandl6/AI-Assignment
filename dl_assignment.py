@@ -78,3 +78,81 @@ plt.plot(pred, label="Predicted")
 plt.plot(y_test, label="Actual")
 plt.legend()
 plt.show()
+
+# ===== BONUS TASK: TEXT CLASSIFICATION USING LSTM =====
+
+import torch
+import torch.nn as nn
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+
+# 1. Sample dataset (positive=1, negative=0)
+texts = [
+    "I love this product",
+    "This is amazing",
+    "Very bad experience",
+    "I hate this",
+    "Awesome work",
+    "Worst service ever",
+    "I am very happy",
+    "Not good",
+]
+
+labels = [1,1,0,0,1,0,1,0]
+
+# 2. Simple tokenization
+vocab = {}
+def tokenize(sentence):
+    words = sentence.lower().split()
+    return [vocab.setdefault(word, len(vocab)+1) for word in words]
+
+tokenized = [tokenize(t) for t in texts]
+
+# 3. Padding
+max_len = max(len(seq) for seq in tokenized)
+padded = [seq + [0]*(max_len - len(seq)) for seq in tokenized]
+
+X = torch.tensor(padded, dtype=torch.long)
+y = torch.tensor(labels, dtype=torch.float32)
+
+# 4. Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+# 5. LSTM Model
+class TextLSTM(nn.Module):
+    def __init__(self, vocab_size):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size+1, 10)
+        self.lstm = nn.LSTM(10, 16, batch_first=True)
+        self.fc = nn.Linear(16,1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.embedding(x)
+        out, _ = self.lstm(x)
+        out = self.fc(out[:,-1,:])
+        return self.sigmoid(out)
+
+model = TextLSTM(len(vocab))
+
+# 6. Training
+criterion = nn.BCELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+for epoch in range(20):
+    output = model(X_train).squeeze()
+    loss = criterion(output, y_train)
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    print(f"Epoch {epoch}, Loss: {loss.item()}")
+
+# 7. Evaluation
+model.eval()
+pred = model(X_test).detach().numpy()
+pred = [1 if p > 0.5 else 0 for p in pred]
+
+print("Accuracy:", accuracy_score(y_test, pred))
+print(classification_report(y_test, pred))
